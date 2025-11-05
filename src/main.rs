@@ -1,8 +1,9 @@
 use axum::{
-    routing::get,Router,response::Json ,extract::State
+    routing::get,Router,response::Json
 };
+use axum::{extract::{State},response::Json as JsonResponse};
 use rusqlite::{Connection, Result};
-use serde::Serialize;
+use serde::{Serialize,Deserialize};
 use std::sync::{Arc,Mutex};
 use std::net::SocketAddr;
 
@@ -19,6 +20,11 @@ struct User{
     age:i32,
 }
 
+#[derive (Deserialize)]
+struct NewUser{
+    name: String,
+    age: i32,
+}
 
 async fn list_users(State(state):State<AppState>)->Json<Vec<User>>{
     let conn=state.db.lock().unwrap();
@@ -38,6 +44,19 @@ async fn list_users(State(state):State<AppState>)->Json<Vec<User>>{
 }
 
 
+async fn add_user(State(state):State<AppState>,
+Json(new_user):Json<NewUser>,)->JsonResponse<serde_json::Value> {
+    let conn = state.db.lock().unwrap();
+
+    conn.execute(
+        "INSERT INTO users(name,age)VALUES(?1,?2)", (&new_user.name, &new_user.age),
+    )
+        .unwrap();
+
+    JsonResponse(serde_json::json!({
+    "status":"User added successfully!"
+    }))
+}
 #[tokio::main]
 async fn main()->Result<()> {
 
@@ -49,7 +68,7 @@ async fn main()->Result<()> {
     };
 
     let app=Router::new()
-    .route("/users", get(list_users))
+    .route("/users", get(list_users).post(add_user))
         .with_state(state);
 
 
