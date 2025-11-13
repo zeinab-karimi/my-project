@@ -5,7 +5,11 @@ use axum::{extract::{State},response::Json as JsonResponse};
 use rusqlite::{Connection, Result};
 use serde::{Serialize,Deserialize};
 use std::sync::{Arc,Mutex};
-use std::net::SocketAddr;
+use std::{env,net::SocketAddr};
+use tokio::net::TcpListener;
+use dotenvy::dotenv;
+use tracing::{info,Level};
+use tracing_subscriber::FmtSubscriber;
 
 
 #[derive(Clone)]
@@ -15,9 +19,9 @@ struct AppState{
 
 #[derive(Serialize)]
 struct User{
-    id: i32,
+    id:u32,
     name: String,
-    age:i32,
+    age:u8,
 }
 
 #[derive (Deserialize)]
@@ -57,8 +61,32 @@ Json(new_user):Json<NewUser>,)->JsonResponse<serde_json::Value> {
     "status":"User added successfully!"
     }))
 }
+
+async fn health()->&'static str{
+"ok"
+}
+
+async fn root()-> &'static str{
+    "Hello from UserService"
+}
 #[tokio::main]
 async fn main()->Result<()> {
+
+    dotenv().ok();
+    let subscriber=FmtSubscriber::builder()
+        .with_max_level(Level::INFO)
+    .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
+
+
+    let host=env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+
+    let port:u16=env::var("SERVER_PORT").unwrap_or_else(|_| "4000".to_string()).parse().unwrap();
+
+
+
 
     let conn=Connection::open("database.db")?;
     println!("Connection to SQlite established");
@@ -68,11 +96,14 @@ async fn main()->Result<()> {
     };
 
     let app=Router::new()
+        .route("/",get(root))
+        .route("/health",get(health))
     .route("/users", get(list_users).post(add_user))
         .with_state(state);
 
 
-    let addr=SocketAddr::from(([127,0,0,1], 3000));
+    let addr:SocketAddr=format!("{}:{}",host,port).parse().unwrap();
+
 
     println!("Listening on http://{}", addr);
 
