@@ -1,7 +1,7 @@
 use axum::{
     routing::get,Router,response::Json
 };
-use axum::{extract::{State},response::Json as JsonResponse};
+use axum::{extract::{State,Path},response::Json as JsonResponse};
 use rusqlite::{Connection, Result};
 use serde::{Serialize,Deserialize};
 use std::sync::{Arc,Mutex};
@@ -69,8 +69,29 @@ async fn health()->&'static str{
 async fn root()-> &'static str{
     "Hello from UserService"
 }
+
+async fn get_user_by_id(Path(id):Path<i32>,State(state):State<AppState>,)->Result<Json<User>,String>{
+    let conn=state.db.lock().unwrap();
+    let mut stmt=conn.prepare("SELECT id,name,age FROM users WHERE id=?1")
+        .map_err(|_|"Query error".to_string())?;
+
+    let result=stmt.query_row([id],|row|{
+        Ok(User{
+            id:row.get(0)?,
+            name:row.get(1)?,
+            age:row.get(2)?,
+        })
+    });
+
+    match result{
+        Ok(user)=>Ok(Json(user)),
+        Err(_)=>Err("User not found".to_string()),
+    }
+}
 #[tokio::main]
 async fn main()->Result<()> {
+
+
 
     dotenv().ok();
     let subscriber=FmtSubscriber::builder()
@@ -96,6 +117,7 @@ async fn main()->Result<()> {
     };
 
     let app=Router::new()
+        .route("/users/:id",get(get_user_by_id))
         .route("/",get(root))
         .route("/health",get(health))
     .route("/users", get(list_users).post(add_user))
