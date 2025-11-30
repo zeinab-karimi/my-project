@@ -1,5 +1,5 @@
 use axum::{
-    routing::get,Router,response::Json
+    routing::get,routing::delete,Router,response::Json
 };
 use axum::{extract::{State,Path},response::Json as JsonResponse};
 use rusqlite::{Connection, Result};
@@ -29,6 +29,20 @@ struct NewUser{
     name: String,
     age: i32,
 }
+
+ async fn delete_user(Path(id):Path<i32>,
+ State(state):State<AppState>)->Result<Json<&'static str>,String>{
+     let conn =state.db.lock().unwrap();
+
+     let rows_affected=conn.execute("DELETE FROM users WHERE id=?1",[id])
+         .map_err(|_|"Delete error".to_string())?;
+
+     if rows_affected==0{
+         return Err("User not found".to_string());
+     }
+     Ok(Json("User deleted successfully"))
+
+ }
 
 async fn list_users(State(state):State<AppState>)->Json<Vec<User>>{
     let conn=state.db.lock().unwrap();
@@ -117,7 +131,7 @@ async fn main()->Result<()> {
     };
 
     let app=Router::new()
-        .route("/users/:id",get(get_user_by_id))
+        .route("/users/:id",get(get_user_by_id).delete(delete_user))
         .route("/",get(root))
         .route("/health",get(health))
     .route("/users", get(list_users).post(add_user))
